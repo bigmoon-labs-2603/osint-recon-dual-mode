@@ -7,13 +7,14 @@
 
 > 仅用于合法授权的安全评估、资产盘点与公开信息调研。
 
-## 功能
+## 功能亮点
 
 - 目标标准化（URL / 域名 / IP）
 - DNS 解析（A 记录）
-- HTTP 标头抓取
-- robots.txt / sitemap.xml 检查
-- 首页邮箱提取（正则）
+- HTTP 标头抓取（状态码、重定向后 URL、响应头）
+- `robots.txt` / `sitemap.xml` / `.well-known/security.txt` 检查
+- 首页 `title` 与邮箱提取（正则）
+- 被动子域名收集（crt.sh）
 - 结果导出为 JSON
 
 ## 目录结构
@@ -22,6 +23,7 @@
 - `osint_cli.py`：命令行入口
 - `osint_gui.py`：图形界面入口（Tkinter）
 - `requirements.txt`：可选依赖
+- `.gitignore`：忽略缓存与临时文件
 
 ## 安装
 
@@ -32,7 +34,7 @@ python -m venv .venv
 pip install -r requirements.txt
 ```
 
-> 不装依赖也可以运行（会走标准库降级路径）。
+> 不装依赖也可以运行（会走标准库降级路径），但推荐安装 `requests`。
 
 ## CMD 模式
 
@@ -44,6 +46,8 @@ python osint_cli.py --target example.com --out result.json
 
 - `--timeout 12`
 - `--user-agent "Mozilla/5.0 ..."`
+- `--no-verify-tls`（实验环境可用，不建议生产）
+- `--no-subdomains`（关闭被动子域名收集）
 
 ## GUI 模式
 
@@ -51,7 +55,12 @@ python osint_cli.py --target example.com --out result.json
 python osint_gui.py
 ```
 
-输入目标后点击“开始收集”，可一键保存 JSON。
+GUI 支持：
+
+- 目标输入
+- 勾选 TLS 验证
+- 勾选被动子域名收集
+- 一键保存 JSON
 
 ## 结果示例字段
 
@@ -59,17 +68,27 @@ python osint_gui.py
 - `normalized`
 - `dns`
 - `http_headers`
+- `web.title`
+- `web.emails`
 - `robots`
 - `sitemap`
-- `emails`
+- `security_txt`
+- `subdomains`
+- `errors`
 - `timestamp`
+
+## 安全与合规
+
+- 本项目不包含漏洞利用、爆破、提权等攻击能力
+- 仅面向公开信息与被动调研
+- 使用者需对目标授权与当地法律合规负责
 
 ## 路线图
 
-- [ ] 子域名爆破（被动源整合）
-- [ ] 证书透明日志（CT）聚合
+- [ ] 插件化数据源（Shodan/Censys/FOFA 适配层）
 - [ ] 截图采集（首页快照）
-- [ ] 插件化数据源
+- [ ] 批量目标与并发任务队列
+- [ ] Markdown / DOCX 报告导出
 
 ## License
 

@@ -1,6 +1,7 @@
 import json
 import re
 import socket
+import ssl
 from datetime import datetime, timezone
 from urllib.parse import urlparse
 from urllib.request import Request, urlopen
@@ -11,6 +12,7 @@ except Exception:
     requests = None
 
 EMAIL_RE = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
+TITLE_RE = re.compile(r"<title[^>]*>(.*?)</title>", re.I | re.S)
 
 
 def _normalize_target(target: str) -> str:
@@ -27,18 +29,23 @@ def _hostname_from_target(target: str) -> str:
     return p.hostname or target
 
 
-def _http_get(url: str, timeout: int = 12, user_agent: str = "OSINT-Recon-Dual-Mode/1.0"):
+def _http_get(url: str, timeout: int = 12, user_agent: str = "OSINT-Recon-Dual-Mode/1.0", verify_tls: bool = True):
     headers = {"User-Agent": user_agent}
     if requests:
-        r = requests.get(url, headers=headers, timeout=timeout, allow_redirects=True)
+        r = requests.get(url, headers=headers, timeout=timeout, allow_redirects=True, verify=verify_tls)
         return {
             "url": r.url,
             "status": r.status_code,
             "headers": dict(r.headers),
             "text": r.text,
         }
+
     req = Request(url, headers=headers)
-    with urlopen(req, timeout=timeout) as resp:
+    context = None
+    if not verify_tls:
+        context = ssl._create_unverified_context()
+
+    with urlopen(req, timeout=timeout, context=context) as resp:
         data = resp.read().decode("utf-8", errors="ignore")
         return {
             "url": resp.geturl(),
@@ -48,7 +55,43 @@ def _http_get(url: str, timeout: int = 12, user_agent: str = "OSINT-Recon-Dual-M
         }
 
 
-def collect_osint(target: str, timeout: int = 12, user_agent: str = "OSINT-Recon-Dual-Mode/1.0") -> dict:
+def _extract_title(html: str) -> str:
+    m = TITLE_RE.search(html or "")
+    return m.group(1).strip() if m else ""
+
+
+def _fetch_crtsh_subdomains(host: str, timeout: int = 12) -> list[str]:
+    if not requests:
+        return []
+    url = f"https://crt.sh/?q=%25.{host}&output=json"
+    r = requests.get(url, timeout=timeout)
+    if r.status_code != 200:
+        return []
+    names = set()
+    try:
+        arr = r.json()
+    except Exception:
+        return []
+    for item in arr:
+        v = (item.get("name_value") or "").strip()
+        if not v:
+            continue
+        for n in v.splitlines():
+            n = n.strip().lower()
+            if n.startswith("*."):
+                n = n[2:]
+            if n:
+                names.add(n)
+    return sorted(names)
+
+
+def collect_osint(
+    target: str,
+    timeout: int = 12,
+    user_agent: str = "OSINT-Recon-Dual-Mode/1.0",
+    verify_tls: bool = True,
+    with_subdomains: bool = True,
+) -> dict:
     normalized = _normalize_target(target)
     host = _hostname_from_target(normalized)
 
@@ -58,9 +101,11 @@ def collect_osint(target: str, timeout: int = 12, user_agent: str = "OSINT-Recon
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "dns": {},
         "http_headers": {},
+        "web": {"title": "", "emails": []},
         "robots": {},
         "sitemap": {},
-        "emails": [],
+        "security_txt": {},
+        "subdomains": [],
         "errors": [],
     }
 
@@ -75,21 +120,27 @@ def collect_osint(target: str, timeout: int = 12, user_agent: str = "OSINT-Recon
     # Main page
     page_text = ""
     try:
-        main = _http_get(normalized, timeout=timeout, user_agent=user_agent)
+        main = _http_get(normalized, timeout=timeout, user_agent=user_agent, verify_tls=verify_tls)
         result["http_headers"] = {
             "final_url": main.get("url"),
             "status": main.get("status"),
             "headers": main.get("headers", {}),
         }
         page_text = main.get("text", "") or ""
+        result["web"]["title"] = _extract_title(page_text)
     except Exception as e:
         result["errors"].append(f"http_main: {e}")
 
-    # robots / sitemap
-    for key, suffix in (("robots", "/robots.txt"), ("sitemap", "/sitemap.xml")):
+    # robots / sitemap / security.txt
+    checks = (
+        ("robots", "/robots.txt"),
+        ("sitemap", "/sitemap.xml"),
+        ("security_txt", "/.well-known/security.txt"),
+    )
+    for key, suffix in checks:
         try:
             base = normalized.rstrip("/")
-            info = _http_get(base + suffix, timeout=timeout, user_agent=user_agent)
+            info = _http_get(base + suffix, timeout=timeout, user_agent=user_agent, verify_tls=verify_tls)
             result[key] = {
                 "url": info.get("url"),
                 "status": info.get("status"),
@@ -101,7 +152,14 @@ def collect_osint(target: str, timeout: int = 12, user_agent: str = "OSINT-Recon
 
     # emails
     emails = sorted(set(x.lower() for x in EMAIL_RE.findall(page_text)))
-    result["emails"] = emails
+    result["web"]["emails"] = emails
+
+    # passive subdomains
+    if with_subdomains:
+        try:
+            result["subdomains"] = _fetch_crtsh_subdomains(host, timeout=timeout)
+        except Exception as e:
+            result["errors"].append(f"crtsh: {e}")
 
     return result
 
