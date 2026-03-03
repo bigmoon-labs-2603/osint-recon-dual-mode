@@ -4,13 +4,27 @@ import sys
 
 from batch_utils import run_batch
 from osint_core import collect_osint, save_json
-from plugins import parse_plugin_names
-from report_export import export_docx, export_markdown
+from plugins import parse_plugin_names, run_plugins
+from report_export import export_docx, export_markdown, export_timeline_markdown
+from risk_scoring import score_risk
 
 
 def _read_targets_file(path: str):
     with open(path, "r", encoding="utf-8") as f:
         return [line.strip() for line in f if line.strip() and not line.strip().startswith("#")]
+
+
+def _enrich_item(item: dict, plugin_names: list[str], plugin_timeout: int, no_risk: bool):
+    host = ((item.get("dns") or {}).get("host") or item.get("target_input") or "").strip()
+    if plugin_names and host:
+        item["plugins"] = run_plugins(host, plugin_names, timeout=plugin_timeout)
+    else:
+        item["plugins"] = {}
+
+    if not no_risk:
+        item["risk"] = score_risk(item)
+
+    return item
 
 
 def main():
@@ -24,12 +38,14 @@ def main():
     parser.add_argument("--no-verify-tls", action="store_true", help="Disable TLS verification (for lab/debug only)")
     parser.add_argument("--no-subdomains", action="store_true", help="Disable passive subdomain lookup")
 
-    parser.add_argument("--plugins", default="", help="Plugin engines: fofa,shodan,censys")
+    parser.add_argument("--plugins", default="", help="Comma separated plugins: fofa,shodan,censys")
+    parser.add_argument("--plugin-timeout", type=int, default=15, help="Plugin HTTP timeout")
     parser.add_argument("--no-risk", action="store_true", help="Disable risk scoring")
 
     parser.add_argument("--out", default="", help="Output JSON file path")
     parser.add_argument("--export-md", default="", help="Export markdown report path")
     parser.add_argument("--export-docx", default="", help="Export docx report path")
+    parser.add_argument("--export-timeline", default="", help="Export timeline markdown path")
 
     args = parser.parse_args()
 
@@ -39,7 +55,6 @@ def main():
     verify_tls = not args.no_verify_tls
     with_subdomains = not args.no_subdomains
     plugin_names = parse_plugin_names(args.plugins)
-    enable_risk = not args.no_risk
 
     try:
         if args.targets_file:
@@ -51,9 +66,8 @@ def main():
                 user_agent=args.user_agent,
                 verify_tls=verify_tls,
                 with_subdomains=with_subdomains,
-                plugin_names=plugin_names,
-                enable_risk=enable_risk,
             )
+            result = [_enrich_item(x, plugin_names, args.plugin_timeout, args.no_risk) for x in result]
         else:
             result = collect_osint(
                 args.target,
@@ -61,9 +75,9 @@ def main():
                 user_agent=args.user_agent,
                 verify_tls=verify_tls,
                 with_subdomains=with_subdomains,
-                plugin_names=plugin_names,
-                enable_risk=enable_risk,
             )
+            result = _enrich_item(result, plugin_names, args.plugin_timeout, args.no_risk)
+
     except Exception as e:
         print(f"[!] failed: {e}", file=sys.stderr)
         sys.exit(1)
@@ -81,6 +95,10 @@ def main():
     if args.export_docx:
         export_docx(result, args.export_docx)
         print(f"[+] saved docx => {args.export_docx}")
+
+    if args.export_timeline:
+        export_timeline_markdown(result, args.export_timeline)
+        print(f"[+] saved timeline => {args.export_timeline}")
 
 
 if __name__ == "__main__":

@@ -5,19 +5,6 @@ from pathlib import Path
 from xml.sax.saxutils import escape
 
 
-def _now():
-    return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-
-def _timeline_line(r: dict) -> str:
-    ts = r.get("timestamp", "")
-    host = (r.get("dns") or {}).get("host", "")
-    risk = r.get("risk") or {}
-    level = risk.get("level", "n/a")
-    score = risk.get("score", "n/a")
-    return f"- {ts} | {host} | risk={level} ({score})"
-
-
 def _md_for_single(r: dict) -> str:
     lines = []
     lines.append(f"## Target: {r.get('target_input', '')}")
@@ -39,23 +26,18 @@ def _md_for_single(r: dict) -> str:
     subdomains = r.get("subdomains") or []
     lines.append(f"- Passive subdomains: {len(subdomains)}")
 
+    risk = r.get("risk") or {}
+    if risk:
+        lines.append(f"- Risk: **{risk.get('level', 'n/a')}** ({risk.get('score', 'n/a')}/100)")
+
     plugins = r.get("plugins") or {}
     if plugins:
         lines.append("- Plugin findings:")
-        for p, pdata in plugins.items():
-            if pdata.get("ok"):
-                lines.append(f"  - {p}: {len(pdata.get('items') or [])} items")
+        for name, pdata in plugins.items():
+            if isinstance(pdata, dict) and pdata.get("ok"):
+                lines.append(f"  - {name}: {len(pdata.get('items') or [])}")
             else:
-                lines.append(f"  - {p}: ERROR - {pdata.get('error', '')}")
-
-    risk = r.get("risk") or {}
-    if risk:
-        lines.append(f"- Risk score: {risk.get('score', 'N/A')} ({risk.get('level', 'N/A')})")
-        factors = risk.get("factors") or []
-        if factors:
-            lines.append("  - Factors:")
-            for f in factors[:8]:
-                lines.append(f"    - {f}")
+                lines.append(f"  - {name}: error")
 
     errs = r.get("errors") or []
     if errs:
@@ -71,20 +53,39 @@ def export_markdown(result, out_path: str):
     p = Path(out_path)
     p.parent.mkdir(parents=True, exist_ok=True)
 
-    lines = ["# OSINT Recon Report", "", f"Generated: {_now()}", ""]
+    ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    lines = ["# OSINT Recon Report", "", f"Generated: {ts}", ""]
 
+    if isinstance(result, list):
+        lines.append(f"Total targets: **{len(result)}**")
+        lines.append("")
+        for r in result:
+            lines.append(_md_for_single(r))
+    else:
+        lines.append(_md_for_single(result))
+
+    p.write_text("\n".join(lines), encoding="utf-8")
+
+
+def export_timeline_markdown(result, out_path: str):
+    p = Path(out_path)
+    p.parent.mkdir(parents=True, exist_ok=True)
     items = result if isinstance(result, list) else [result]
-    lines.append(f"Total targets: **{len(items)}**")
-    lines.append("")
 
-    lines.append("## Intelligence Timeline")
-    lines.append("")
+    lines = ["# OSINT Timeline", "", f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", ""]
     for r in items:
-        lines.append(_timeline_line(r))
+        ts = r.get("timestamp", "")
+        tgt = r.get("target_input", "")
+        risk = r.get("risk") or {}
+        lines.append(f"- [{ts}] {tgt} | risk={risk.get('level','n/a')}({risk.get('score','n/a')})")
+        plugins = r.get("plugins") or {}
+        for name, pdata in plugins.items():
+            if isinstance(pdata, dict) and pdata.get("ok"):
+                lines.append(f"  - plugin:{name} hits={len(pdata.get('items') or [])}")
+        errs = r.get("errors") or []
+        if errs:
+            lines.append(f"  - errors={len(errs)}")
     lines.append("")
-
-    for r in items:
-        lines.append(_md_for_single(r))
 
     p.write_text("\n".join(lines), encoding="utf-8")
 
@@ -96,14 +97,12 @@ def export_docx(result, out_path: str):
     if isinstance(result, list):
         payload = {
             "generated": datetime.now().isoformat(),
-            "timeline": [_timeline_line(x) for x in result],
             "total": len(result),
             "items": result,
         }
     else:
         payload = {
             "generated": datetime.now().isoformat(),
-            "timeline": [_timeline_line(result)],
             "total": 1,
             "items": [result],
         }

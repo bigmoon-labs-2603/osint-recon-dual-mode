@@ -11,8 +11,6 @@ def run_batch(
     user_agent: str = "OSINT-Recon-Dual-Mode/1.0",
     verify_tls: bool = True,
     with_subdomains: bool = True,
-    plugin_names: list[str] | None = None,
-    enable_risk: bool = True,
 ):
     clean_targets = [t.strip() for t in targets if t and t.strip()]
     results = []
@@ -26,8 +24,6 @@ def run_batch(
                 user_agent=user_agent,
                 verify_tls=verify_tls,
                 with_subdomains=with_subdomains,
-                plugin_names=plugin_names,
-                enable_risk=enable_risk,
             ): t
             for t in clean_targets
         }
@@ -44,7 +40,6 @@ def run_batch(
                 }
             results.append(r)
 
-    # keep output stable by input order
     order = {t: i for i, t in enumerate(clean_targets)}
     results.sort(key=lambda x: order.get(x.get("target_input", ""), 10**9))
     return results

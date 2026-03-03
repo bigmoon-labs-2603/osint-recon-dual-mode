@@ -5,51 +5,53 @@ from tkinter import filedialog, messagebox, scrolledtext
 
 from batch_utils import run_batch
 from osint_core import collect_osint, save_json
-from plugins import parse_plugin_names
-from report_export import export_docx, export_markdown
+from plugins import parse_plugin_names, run_plugins
+from report_export import export_docx, export_markdown, export_timeline_markdown
+from risk_scoring import score_risk
 
 
 class App:
     def __init__(self, root):
         self.root = root
         self.root.title("OSINT Recon Dual Mode - GUI")
-        self.root.geometry("1120x780")
+        self.root.geometry("1200x800")
 
         top = tk.Frame(root)
         top.pack(fill="x", padx=10, pady=10)
 
         tk.Label(top, text="Target:").grid(row=0, column=0, sticky="w")
-        self.target = tk.Entry(top, width=50)
+        self.target = tk.Entry(top, width=42)
         self.target.grid(row=0, column=1, sticky="ew", padx=8)
         self.target.insert(0, "example.com")
 
         tk.Label(top, text="Targets File:").grid(row=1, column=0, sticky="w")
-        self.targets_file = tk.Entry(top, width=50)
+        self.targets_file = tk.Entry(top, width=42)
         self.targets_file.grid(row=1, column=1, sticky="ew", padx=8)
         tk.Button(top, text="选择文件", command=self.pick_targets_file).grid(row=1, column=2, padx=6)
 
         self.verify_tls = tk.BooleanVar(value=True)
         self.with_subdomains = tk.BooleanVar(value=True)
-        self.enable_risk = tk.BooleanVar(value=True)
-
         tk.Checkbutton(top, text="Verify TLS", variable=self.verify_tls).grid(row=0, column=2, padx=6)
         tk.Checkbutton(top, text="Passive subdomains", variable=self.with_subdomains).grid(row=0, column=3, padx=6)
-        tk.Checkbutton(top, text="Risk scoring", variable=self.enable_risk).grid(row=0, column=4, padx=6)
 
-        tk.Label(top, text="Plugins:").grid(row=1, column=3, sticky="e")
-        self.plugins = tk.Entry(top, width=20)
-        self.plugins.grid(row=1, column=4, sticky="w")
+        tk.Label(top, text="Workers:").grid(row=1, column=3, sticky="e")
+        self.workers = tk.Entry(top, width=5)
+        self.workers.grid(row=1, column=4, sticky="w")
+        self.workers.insert(0, "5")
+
+        tk.Label(top, text="Plugins:").grid(row=0, column=4, sticky="e")
+        self.plugins = tk.Entry(top, width=18)
+        self.plugins.grid(row=0, column=5, sticky="w")
         self.plugins.insert(0, "fofa,shodan,censys")
 
-        tk.Label(top, text="Workers:").grid(row=1, column=5, sticky="e")
-        self.workers = tk.Entry(top, width=5)
-        self.workers.grid(row=1, column=6, sticky="w")
-        self.workers.insert(0, "5")
+        self.enable_risk = tk.BooleanVar(value=True)
+        tk.Checkbutton(top, text="Risk scoring", variable=self.enable_risk).grid(row=1, column=5, sticky="w")
 
         tk.Button(top, text="开始收集", command=self.run_collect_async).grid(row=0, column=6, padx=5)
         tk.Button(top, text="保存JSON", command=self.save_json_result).grid(row=0, column=7, padx=5)
         tk.Button(top, text="导出MD", command=self.export_md).grid(row=1, column=7, padx=5)
         tk.Button(top, text="导出DOCX", command=self.export_docx).grid(row=1, column=8, padx=5)
+        tk.Button(top, text="导出Timeline", command=self.export_timeline).grid(row=0, column=8, padx=5)
 
         top.columnconfigure(1, weight=1)
 
@@ -68,10 +70,20 @@ class App:
         th = threading.Thread(target=self.run_collect, daemon=True)
         th.start()
 
+    def _enrich(self, item):
+        host = ((item.get("dns") or {}).get("host") or item.get("target_input") or "").strip()
+        pnames = parse_plugin_names(self.plugins.get())
+        if pnames and host:
+            item["plugins"] = run_plugins(host, pnames, timeout=15)
+        else:
+            item["plugins"] = {}
+        if self.enable_risk.get():
+            item["risk"] = score_risk(item)
+        return item
+
     def run_collect(self):
         t = self.target.get().strip()
         tf = self.targets_file.get().strip()
-        plugin_names = parse_plugin_names(self.plugins.get().strip())
 
         if not t and not tf:
             messagebox.showwarning("提示", "请输入目标或选择目标列表文件")
@@ -86,22 +98,20 @@ class App:
                 with open(tf, "r", encoding="utf-8") as f:
                     targets = [x.strip() for x in f if x.strip() and not x.strip().startswith("#")]
                 workers = int(self.workers.get() or "5")
-                self.result = run_batch(
+                raw = run_batch(
                     targets,
                     workers=workers,
                     verify_tls=self.verify_tls.get(),
                     with_subdomains=self.with_subdomains.get(),
-                    plugin_names=plugin_names,
-                    enable_risk=self.enable_risk.get(),
                 )
+                self.result = [self._enrich(x) for x in raw]
             else:
-                self.result = collect_osint(
+                one = collect_osint(
                     t,
                     verify_tls=self.verify_tls.get(),
                     with_subdomains=self.with_subdomains.get(),
-                    plugin_names=plugin_names,
-                    enable_risk=self.enable_risk.get(),
                 )
+                self.result = self._enrich(one)
 
             self.output.delete("1.0", tk.END)
             self.output.insert(tk.END, json.dumps(self.result, ensure_ascii=False, indent=2))
@@ -136,6 +146,16 @@ class App:
         if not f:
             return
         export_docx(self.result, f)
+        messagebox.showinfo("完成", f"已导出: {f}")
+
+    def export_timeline(self):
+        if self.result is None:
+            messagebox.showinfo("提示", "先执行一次收集")
+            return
+        f = filedialog.asksaveasfilename(title="导出 Timeline", defaultextension=".md", filetypes=[("Markdown", "*.md")])
+        if not f:
+            return
+        export_timeline_markdown(self.result, f)
         messagebox.showinfo("完成", f"已导出: {f}")
 
 
