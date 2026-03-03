@@ -15,13 +15,17 @@
 - `robots.txt` / `sitemap.xml` / `.well-known/security.txt` 检查
 - 首页 `title` 与邮箱提取（正则）
 - 被动子域名收集（crt.sh）
-- 结果导出为 JSON
+- **批量目标并发收集（TXT）**
+- **报告导出（JSON / Markdown / DOCX）**
 
 ## 目录结构
 
 - `osint_core.py`：核心采集逻辑
+- `batch_utils.py`：批量并发执行
+- `report_export.py`：Markdown / DOCX 导出
 - `osint_cli.py`：命令行入口
 - `osint_gui.py`：图形界面入口（Tkinter）
+- `targets-example.txt`：批量样例
 - `requirements.txt`：可选依赖
 - `.gitignore`：忽略缓存与临时文件
 
@@ -34,12 +38,18 @@ python -m venv .venv
 pip install -r requirements.txt
 ```
 
-> 不装依赖也可以运行（会走标准库降级路径），但推荐安装 `requests`。
-
 ## CMD 模式
 
+### 单目标
+
 ```bash
-python osint_cli.py --target example.com --out result.json
+python osint_cli.py --target example.com --out result.json --export-md report.md --export-docx report.docx
+```
+
+### 批量目标
+
+```bash
+python osint_cli.py --targets-file targets-example.txt --workers 8 --out batch.json --export-md batch.md --export-docx batch.docx
 ```
 
 可选参数：
@@ -57,25 +67,11 @@ python osint_gui.py
 
 GUI 支持：
 
-- 目标输入
-- 勾选 TLS 验证
-- 勾选被动子域名收集
-- 一键保存 JSON
-
-## 结果示例字段
-
-- `target_input`
-- `normalized`
-- `dns`
-- `http_headers`
-- `web.title`
-- `web.emails`
-- `robots`
-- `sitemap`
-- `security_txt`
-- `subdomains`
-- `errors`
-- `timestamp`
+- 单目标 / 批量文件 两种输入
+- Worker 并发配置
+- TLS 校验开关
+- 被动子域名开关
+- 一键导出 JSON / MD / DOCX
 
 ## 安全与合规
 
@@ -87,8 +83,8 @@ GUI 支持：
 
 - [ ] 插件化数据源（Shodan/Censys/FOFA 适配层）
 - [ ] 截图采集（首页快照）
-- [ ] 批量目标与并发任务队列
-- [ ] Markdown / DOCX 报告导出
+- [ ] 数据去重与风险评分
+- [ ] 结构化情报时间线
 
 ## License
 
