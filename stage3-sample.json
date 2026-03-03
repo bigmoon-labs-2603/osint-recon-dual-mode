@@ -1,0 +1,105 @@
+{
+  "target_input": "iana.org",
+  "normalized": "https://iana.org",
+  "timestamp": "2026-03-03T06:53:24.988759+00:00",
+  "dns": {
+    "host": "iana.org",
+    "a_records": [
+      "192.0.43.8"
+    ]
+  },
+  "http_headers": {
+    "final_url": "https://www.iana.org/",
+    "status": 200,
+    "headers": {
+      "Date": "Tue, 03 Mar 2026 06:53:26 GMT",
+      "Server": "Apache",
+      "X-Content-Type-Options": "nosniff, nosniff",
+      "Vary": "Accept-Encoding",
+      "Last-Modified": "Thu, 29 May 2025 18:00:55 GMT",
+      "X-Frame-Options": "DENY",
+      "Referrer-Policy": "same-origin",
+      "Cross-Origin-Opener-Policy": "same-origin",
+      "Cache-Control": "public, max-age=3600",
+      "Expires": "Tue, 03 Mar 2026 07:53:26 GMT",
+      "Content-Encoding": "gzip",
+      "Content-Security-Policy": "upgrade-insecure-requests; default-src 'self' https://*.iana.org; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.google.com https://cse.google.com https://clients1.google.com; style-src 'self' 'unsafe-inline' https://www.google.com; child-src 'self' https://www.youtube.com https://clients1.google.com https://cse.google.com https://www.google.com/; img-src 'self' https://data.iana.org https://www.iana.org https://www.google.com https://www.googleapis.com https://clients1.google.com https://*.gstatic.com;",
+      "Age": "6",
+      "Content-Length": "1646",
+      "Keep-Alive": "timeout=2, max=358",
+      "Connection": "Keep-Alive",
+      "Content-Type": "text/html; charset=UTF-8",
+      "Strict-Transport-Security": "max-age=48211200; preload"
+    }
+  },
+  "web": {
+    "title": "Internet Assigned Numbers Authority",
+    "emails": []
+  },
+  "robots": {
+    "url": "https://www.iana.org/robots.txt",
+    "status": 200,
+    "length": 24
+  },
+  "sitemap": {
+    "url": "https://www.iana.org/sitemap.xml",
+    "status": 404,
+    "length": 3877
+  },
+  "security_txt": {
+    "url": "https://www.iana.org/.well-known/security.txt",
+    "status": 200,
+    "length": 349
+  },
+  "subdomains": [
+    "data.iana.org",
+    "data2.iana.org",
+    "dnstest.int.iana.org",
+    "handbook.int.iana.org",
+    "iana.org",
+    "int.iana.org",
+    "intranet.int.iana.org",
+    "itar.iana.org",
+    "ns.iana.org",
+    "opal.int.iana.org",
+    "rdns-public.int.iana.org",
+    "rdns.int.iana.org",
+    "rzm-epp.iana.org",
+    "rzm-iana-ote.iana.org",
+    "rzm-ote-epp.iana.org",
+    "rzm.iana.org",
+    "www.iana.org",
+    "www.itar.iana.org",
+    "www.ns.iana.org",
+    "www.rzm-epp.iana.org",
+    "www.rzm.iana.org"
+  ],
+  "plugins": {
+    "fofa": {
+      "plugin": "fofa",
+      "ok": false,
+      "error": "missing FOFA_EMAIL / FOFA_KEY",
+      "items": []
+    },
+    "shodan": {
+      "plugin": "shodan",
+      "ok": false,
+      "error": "missing SHODAN_API_KEY",
+      "items": []
+    },
+    "censys": {
+      "plugin": "censys",
+      "ok": false,
+      "error": "missing CENSYS_API_ID / CENSYS_API_SECRET",
+      "items": []
+    }
+  },
+  "risk": {
+    "score": 10,
+    "level": "low",
+    "factors": [
+      "Medium exposed subdomain surface: 21"
+    ]
+  },
+  "errors": []
+}

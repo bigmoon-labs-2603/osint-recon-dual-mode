@@ -11,6 +11,9 @@ try:
 except Exception:
     requests = None
 
+from plugins import run_plugins
+from risk_scoring import score_risk
+
 EMAIL_RE = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
 TITLE_RE = re.compile(r"<title[^>]*>(.*?)</title>", re.I | re.S)
 
@@ -91,6 +94,8 @@ def collect_osint(
     user_agent: str = "OSINT-Recon-Dual-Mode/1.0",
     verify_tls: bool = True,
     with_subdomains: bool = True,
+    plugin_names: list[str] | None = None,
+    enable_risk: bool = True,
 ) -> dict:
     normalized = _normalize_target(target)
     host = _hostname_from_target(normalized)
@@ -106,6 +111,8 @@ def collect_osint(
         "sitemap": {},
         "security_txt": {},
         "subdomains": [],
+        "plugins": {},
+        "risk": {},
         "errors": [],
     }
 
@@ -160,6 +167,20 @@ def collect_osint(
             result["subdomains"] = _fetch_crtsh_subdomains(host, timeout=timeout)
         except Exception as e:
             result["errors"].append(f"crtsh: {e}")
+
+    # plugin engines
+    if plugin_names:
+        try:
+            result["plugins"] = run_plugins(host, plugin_names, timeout=timeout)
+        except Exception as e:
+            result["errors"].append(f"plugins: {e}")
+
+    # risk scoring
+    if enable_risk:
+        try:
+            result["risk"] = score_risk(result)
+        except Exception as e:
+            result["errors"].append(f"risk: {e}")
 
     return result
 

@@ -5,6 +5,7 @@ from tkinter import filedialog, messagebox, scrolledtext
 
 from batch_utils import run_batch
 from osint_core import collect_osint, save_json
+from plugins import parse_plugin_names
 from report_export import export_docx, export_markdown
 
 
@@ -12,35 +13,43 @@ class App:
     def __init__(self, root):
         self.root = root
         self.root.title("OSINT Recon Dual Mode - GUI")
-        self.root.geometry("1100x760")
+        self.root.geometry("1120x780")
 
         top = tk.Frame(root)
         top.pack(fill="x", padx=10, pady=10)
 
         tk.Label(top, text="Target:").grid(row=0, column=0, sticky="w")
-        self.target = tk.Entry(top, width=52)
+        self.target = tk.Entry(top, width=50)
         self.target.grid(row=0, column=1, sticky="ew", padx=8)
         self.target.insert(0, "example.com")
 
         tk.Label(top, text="Targets File:").grid(row=1, column=0, sticky="w")
-        self.targets_file = tk.Entry(top, width=52)
+        self.targets_file = tk.Entry(top, width=50)
         self.targets_file.grid(row=1, column=1, sticky="ew", padx=8)
         tk.Button(top, text="选择文件", command=self.pick_targets_file).grid(row=1, column=2, padx=6)
 
         self.verify_tls = tk.BooleanVar(value=True)
         self.with_subdomains = tk.BooleanVar(value=True)
+        self.enable_risk = tk.BooleanVar(value=True)
+
         tk.Checkbutton(top, text="Verify TLS", variable=self.verify_tls).grid(row=0, column=2, padx=6)
         tk.Checkbutton(top, text="Passive subdomains", variable=self.with_subdomains).grid(row=0, column=3, padx=6)
+        tk.Checkbutton(top, text="Risk scoring", variable=self.enable_risk).grid(row=0, column=4, padx=6)
 
-        tk.Label(top, text="Workers:").grid(row=1, column=3, sticky="e")
+        tk.Label(top, text="Plugins:").grid(row=1, column=3, sticky="e")
+        self.plugins = tk.Entry(top, width=20)
+        self.plugins.grid(row=1, column=4, sticky="w")
+        self.plugins.insert(0, "fofa,shodan,censys")
+
+        tk.Label(top, text="Workers:").grid(row=1, column=5, sticky="e")
         self.workers = tk.Entry(top, width=5)
-        self.workers.grid(row=1, column=4, sticky="w")
+        self.workers.grid(row=1, column=6, sticky="w")
         self.workers.insert(0, "5")
 
-        tk.Button(top, text="开始收集", command=self.run_collect_async).grid(row=0, column=4, padx=5)
-        tk.Button(top, text="保存JSON", command=self.save_json_result).grid(row=0, column=5, padx=5)
-        tk.Button(top, text="导出MD", command=self.export_md).grid(row=1, column=5, padx=5)
-        tk.Button(top, text="导出DOCX", command=self.export_docx).grid(row=1, column=6, padx=5)
+        tk.Button(top, text="开始收集", command=self.run_collect_async).grid(row=0, column=6, padx=5)
+        tk.Button(top, text="保存JSON", command=self.save_json_result).grid(row=0, column=7, padx=5)
+        tk.Button(top, text="导出MD", command=self.export_md).grid(row=1, column=7, padx=5)
+        tk.Button(top, text="导出DOCX", command=self.export_docx).grid(row=1, column=8, padx=5)
 
         top.columnconfigure(1, weight=1)
 
@@ -62,6 +71,7 @@ class App:
     def run_collect(self):
         t = self.target.get().strip()
         tf = self.targets_file.get().strip()
+        plugin_names = parse_plugin_names(self.plugins.get().strip())
 
         if not t and not tf:
             messagebox.showwarning("提示", "请输入目标或选择目标列表文件")
@@ -81,12 +91,16 @@ class App:
                     workers=workers,
                     verify_tls=self.verify_tls.get(),
                     with_subdomains=self.with_subdomains.get(),
+                    plugin_names=plugin_names,
+                    enable_risk=self.enable_risk.get(),
                 )
             else:
                 self.result = collect_osint(
                     t,
                     verify_tls=self.verify_tls.get(),
                     with_subdomains=self.with_subdomains.get(),
+                    plugin_names=plugin_names,
+                    enable_risk=self.enable_risk.get(),
                 )
 
             self.output.delete("1.0", tk.END)
